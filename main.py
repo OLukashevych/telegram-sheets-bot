@@ -19,7 +19,10 @@ def get_gsheet():
 
     sheet = client.open_by_key(os.environ["SHEET_KEY"])
     return sheet
-
+    
+@app.get("/")
+def root():
+    return {"status": "ok"}
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
