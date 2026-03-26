@@ -55,7 +55,13 @@ def root():
 
 # 🔹 STATE
 user_states = {}
-
+----------------------------
+@app.get("/debug")
+def debug():
+    return {
+        "bot_token": os.environ.get("BOT_TOKEN")
+    }
+-------------------------------
 # 🔹 WEBHOOK
 @app.post("/webhook")
 async def webhook(request: Request):
