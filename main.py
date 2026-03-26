@@ -1,6 +1,8 @@
 import os
 import json
 import base64
+from datetime import datetime
+
 from fastapi import FastAPI, Request
 import gspread
 from google.oauth2.service_account import Credentials
@@ -19,20 +21,43 @@ def get_gsheet():
 
     sheet = client.open_by_key(os.environ["SHEET_KEY"])
     return sheet
-    
+
+
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
+    try:
+        data = await request.json()
 
-    message = data.get("message", {})
-    text = message.get("text", "")
+        message = data.get("message", {})
+        text = message.get("text", "")
 
-    if text:
-        sheet = get_gsheet()
-        ws = sheet.worksheet("Купую")
-        ws.append_row([text])
+        if text:
+            sheet = get_gsheet()
 
-    return {"ok": True}
+            # ⚠️ назва як у тебе в таблиці
+            ws = sheet.worksheet("купую")
+
+            now = datetime.now()
+
+            row = [
+                now.strftime("%Y-%m-%d"),  # ДатаВнесення
+                now.strftime("%m"),        # Місяць
+                now.strftime("%Y"),        # Рік
+                text,                      # Номенклатура
+                "", "", ""                 # інші поля поки пусті
+            ]
+
+            ws.append_row(row)
+
+        return {"ok": True}
+
+    except Exception as e:
+        print("ERROR:", e)
+        return {"ok": False}
+
+ 
