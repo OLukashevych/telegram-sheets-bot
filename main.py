@@ -107,7 +107,6 @@ async def webhook(request: Request):
 
         if text == "Купую":
             user_states[chat_id] = {"mode": "buy", "step": "item", "data": {}}
-
             send_message(chat_id, "Обери товар:", keyboard=BUY_ITEMS)
             return {"ok": True}
 
@@ -147,7 +146,6 @@ async def webhook(request: Request):
                 ])
 
                 send_message(chat_id, "✅ Купівля записана")
-
                 user_states.pop(chat_id)
                 return {"ok": True}
 
@@ -157,7 +155,6 @@ async def webhook(request: Request):
 
         if text == "Продаю":
             user_states[chat_id] = {"mode": "sell", "step": "item", "data": {}}
-
             send_message(chat_id, "Обери товар:", keyboard=SELL_ITEMS)
             return {"ok": True}
 
@@ -198,7 +195,6 @@ async def webhook(request: Request):
                 ])
 
                 send_message(chat_id, "✅ Продаж записаний")
-
                 user_states.pop(chat_id)
                 return {"ok": True}
 
@@ -208,7 +204,6 @@ async def webhook(request: Request):
 
         if text == "Витрати":
             user_states[chat_id] = {"mode": "expense", "step": "item", "data": {}}
-
             send_message(chat_id, "Обери категорію:", keyboard=EXPENSE_ITEMS)
             return {"ok": True}
 
@@ -237,7 +232,6 @@ async def webhook(request: Request):
                 ])
 
                 send_message(chat_id, "✅ Витрата записана")
-
                 user_states.pop(chat_id)
                 return {"ok": True}
 
