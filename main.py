@@ -46,24 +46,37 @@ user_states = {}
 # =========================
 
 def send_message(chat_id, text):
-    requests.post(f"{TELEGRAM_API}/sendMessage", json={
-        "chat_id": chat_id,
-        "text": text
-    })
+    try:
+        r = requests.post(f"{TELEGRAM_API}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": text
+        })
+        print("SEND:", r.text)
+    except Exception as e:
+        print("SEND ERROR:", e)
 
 
 def send_inline(chat_id, text, keyboard):
-    requests.post(f"{TELEGRAM_API}/sendMessage", json={
-        "chat_id": chat_id,
-        "text": text,
-        "reply_markup": {"inline_keyboard": keyboard}
-    })
+    try:
+        r = requests.post(f"{TELEGRAM_API}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": {
+                "inline_keyboard": keyboard
+            }
+        })
+        print("SEND INLINE:", r.text)
+    except Exception as e:
+        print("INLINE ERROR:", e)
 
 
 def answer_callback(callback_id):
-    requests.post(f"{TELEGRAM_API}/answerCallbackQuery", json={
-        "callback_query_id": callback_id
-    })
+    try:
+        requests.post(f"{TELEGRAM_API}/answerCallbackQuery", json={
+            "callback_query_id": callback_id
+        })
+    except:
+        pass
 
 # =========================
 # 🔹 GOOGLE SHEETS
@@ -100,7 +113,7 @@ async def webhook(request: Request):
         print("INCOMING:", data)
 
         # =========================
-        # 🔹 CALLBACK BUTTONS
+        # 🔹 CALLBACK
         # =========================
         if "callback_query" in data:
             callback = data["callback_query"]
@@ -108,10 +121,9 @@ async def webhook(request: Request):
             action = callback["data"]
 
             answer_callback(callback["id"])
+            print("ACTION:", action)
 
-            print("CALLBACK:", action)
-
-            # MAIN MENU
+            # MENU
             if action == "MENU":
                 send_inline(chat_id, "Обери дію:", [
                     [{"text": "Купую", "callback_data": "BUY"}],
@@ -179,7 +191,7 @@ async def webhook(request: Request):
                     return {"ok": True}
 
         # =========================
-        # 🔹 TEXT
+        # 🔹 MESSAGE
         # =========================
 
         message = data.get("message", {})
