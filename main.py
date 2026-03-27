@@ -50,6 +50,7 @@ def send(chat_id, text, keyboard=None):
         "chat_id": chat_id,
         "text": text
     }
+
     if keyboard:
         payload["reply_markup"] = {"inline_keyboard": keyboard}
 
@@ -57,13 +58,13 @@ def send(chat_id, text, keyboard=None):
 
 
 def menu(chat_id):
-    send(chat_id, "📊", [
+    send(chat_id, "📊 Меню:", [
         [
-            {"text": "Купую", "callback_data": "BUY"},
-            {"text": "Продаю", "callback_data": "SELL"}
+            {"text": "🟢 Купую", "callback_data": "BUY"},
+            {"text": "🔵 Продаю", "callback_data": "SELL"}
         ],
         [
-            {"text": "Витрати", "callback_data": "EXP"}
+            {"text": "🔴 Витрати", "callback_data": "EXP"}
         ]
     ])
 
@@ -104,10 +105,11 @@ async def webhook(request: Request):
 
         state = user_states.get(chat_id, {})
 
-        # MENU BUTTONS
+        # ===== MENU =====
+
         if action == "BUY":
             user_states[chat_id] = {"mode": "buy", "step": "item"}
-            send(chat_id, "Товар:", [[{"text": x, "callback_data": x}] for x in BUY_ITEMS])
+            send(chat_id, "🟢 Купую товар:", [[{"text": x, "callback_data": x}] for x in BUY_ITEMS])
             return {"ok": True}
 
         if action == "SELL":
@@ -116,30 +118,31 @@ async def webhook(request: Request):
             keyboard = [[{"text": x, "callback_data": x}] for x in BUY_ITEMS]
             keyboard += [[{"text": x, "callback_data": x}] for x in SERVICES]
 
-            send(chat_id, "Обери:", keyboard)
+            send(chat_id, "🔵 Продаю:", keyboard)
             return {"ok": True}
 
         if action == "EXP":
             user_states[chat_id] = {"mode": "exp", "step": "item"}
-            send(chat_id, "Стаття:", [[{"text": x, "callback_data": x}] for x in EXPENSES])
+            send(chat_id, "🔴 Витрати:", [[{"text": x, "callback_data": x}] for x in EXPENSES])
             return {"ok": True}
 
-        # ITEM SELECT
+        # ===== ITEM SELECT =====
+
         if state.get("step") == "item":
             state["item"] = action
 
             if state["mode"] == "exp":
                 state["step"] = "amount"
-                send(chat_id, "Сума:")
+                send(chat_id, "Введи суму:")
             else:
                 state["step"] = "qty"
 
                 if action in SERVICES:
                     state["unit"] = SERVICES[action]
-                    send(chat_id, f"К-сть ({state['unit']}):")
+                    send(chat_id, f"Введи кількість {state['unit']}:")
                 else:
                     state["unit"] = "т"
-                    send(chat_id, "К-сть (т):")
+                    send(chat_id, "Введи кількість тонн:")
 
             user_states[chat_id] = state
             return {"ok": True}
@@ -157,30 +160,44 @@ async def webhook(request: Request):
     if not chat_id:
         return {"ok": True}
 
+    # 👉 старт / будь-яке повідомлення без state
     state = user_states.get(chat_id)
 
-    # 👉 якщо немає стану — просто меню (1 раз, без дублю)
+    if text == "/start":
+        menu(chat_id)
+        return {"ok": True}
+
     if not state:
         menu(chat_id)
         return {"ok": True}
 
-    # QTY
+    # ===== QTY =====
+
     if state.get("step") == "qty":
         state["qty"] = float(text)
         state["step"] = "price"
-        send(chat_id, "Ціна:")
+
+        if state["unit"] == "т":
+            send(chat_id, "Введи ціну за тонну:")
+        elif state["unit"] == "год":
+            send(chat_id, "Введи ціну за годину:")
+        else:
+            send(chat_id, "Введи ціну за км:")
+
         user_states[chat_id] = state
         return {"ok": True}
 
-    # PRICE
+    # ===== PRICE =====
+
     if state.get("step") == "price":
         price = float(text)
         qty = state["qty"]
         total = qty * price
 
         now = datetime.now()
-        sheet = get_sheet()
+        date = now.strftime("%d.%m.%Y")
 
+        sheet = get_sheet()
         ws = sheet.worksheet("купую" if state["mode"] == "buy" else "продаю")
 
         ws.append_row([
@@ -194,17 +211,35 @@ async def webhook(request: Request):
             total
         ])
 
-        send(chat_id, f"✅ {total}")
+        # красивий текст
+        if state["mode"] == "buy":
+            text_msg = f"""🟢 Купівля записана:
+{date}
+{state['item']} — {qty} т × {price} грн
+Сума: {total} грн"""
+
+        else:
+            unit = state["unit"]
+            text_msg = f"""🔵 Продаж записаний:
+{date}
+{state['item']} — {qty} {unit} × {price} грн
+Виручка: {total} грн"""
+
+        send(chat_id, text_msg)
 
         user_states.pop(chat_id)
         menu(chat_id)
+
         return {"ok": True}
 
-    # EXPENSE
+    # ===== EXPENSE =====
+
     if state.get("step") == "amount":
         amount = float(text)
 
         now = datetime.now()
+        date = now.strftime("%d.%m.%Y")
+
         sheet = get_sheet()
         ws = sheet.worksheet("витрати")
 
@@ -216,10 +251,13 @@ async def webhook(request: Request):
             amount
         ])
 
-        send(chat_id, f"🔴 {amount}")
+        send(chat_id, f"""🔴 Витрата записана:
+{date}
+{state['item']} — {amount} грн""")
 
         user_states.pop(chat_id)
         menu(chat_id)
+
         return {"ok": True}
 
     return {"ok": True}
