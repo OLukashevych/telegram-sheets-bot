@@ -103,7 +103,6 @@ async def webhook(request: Request):
 
         state = user_states.get(chat_id, {})
 
-        # MENU
         if action == "BUY":
             user_states[chat_id] = {"mode": "buy", "step": "item"}
             keyboard = [[{"text": i, "callback_data": i}] for i in BUY_ITEMS]
@@ -136,7 +135,6 @@ async def webhook(request: Request):
                 item = next(x for x in SELL_ITEMS if x["name"] == action)
                 state["item"] = item["name"]
                 state["unit"] = item["unit"]
-
             else:
                 state["item"] = action
                 state["unit"] = "тонн"
@@ -158,23 +156,22 @@ async def webhook(request: Request):
     if not chat_id:
         return {"ok": True}
 
-    # 🔹 START
-if text in ["/start", "/menu"]:
-    show_menu(chat_id)
-    return {"ok": True}
+    if text in ["/start", "/menu"]:
+        show_menu(chat_id)
+        return {"ok": True}
 
-state = user_states.get(chat_id)
+    state = user_states.get(chat_id)
 
-if not state:
-    show_menu(chat_id)
-    return {"ok": True}
+    if not state:
+        show_menu(chat_id)
+        return {"ok": True}
 
     # ======================
     # QTY
     # ======================
 
     if state.get("step") == "qty":
-        state["qty"] = float(text)
+        state["qty"] = float(text.replace(",", "."))
         state["step"] = "price"
         user_states[chat_id] = state
 
@@ -194,8 +191,7 @@ if not state:
     # ======================
 
     if state.get("step") == "price":
-
-        price = float(text)
+        price = float(text.replace(",", "."))
         qty = state["qty"]
         unit = state["unit"]
 
@@ -243,7 +239,6 @@ if not state:
 
         send_message(chat_id, text_msg)
         user_states.pop(chat_id)
-
         show_menu(chat_id)
         return {"ok": True}
 
@@ -252,8 +247,7 @@ if not state:
     # ======================
 
     if state.get("step") == "amount":
-
-        amount = float(text)
+        amount = float(text.replace(",", "."))
         now = datetime.now()
 
         sheet = get_gsheet()
@@ -269,7 +263,6 @@ if not state:
 
         send_message(chat_id, f"✅ {state['item']} — {amount} грн")
         user_states.pop(chat_id)
-
         show_menu(chat_id)
         return {"ok": True}
 
