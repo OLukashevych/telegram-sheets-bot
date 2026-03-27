@@ -159,15 +159,15 @@ async def webhook(request: Request):
         return {"ok": True}
 
     # 🔹 START
-    if text == "/start":
-        show_menu(chat_id)
-        return {"ok": True}
+if text in ["/start", "/menu"]:
+    show_menu(chat_id)
+    return {"ok": True}
 
-    state = user_states.get(chat_id)
+state = user_states.get(chat_id)
 
-    if not state:
-        send_message(chat_id, "👉 Натисни /start")
-        return {"ok": True}
+if not state:
+    show_menu(chat_id)
+    return {"ok": True}
 
     # ======================
     # QTY
