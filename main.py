@@ -156,9 +156,9 @@ async def webhook(request: Request):
     if not chat_id:
         return {"ok": True}
 
-    if text in ["/start", "/menu"]:
-        show_menu(chat_id)
-        return {"ok": True}
+    if text in ["/menu", "/start"]:
+    show_menu(chat_id)
+    return {"ok": True}
 
     state = user_states.get(chat_id)
 
