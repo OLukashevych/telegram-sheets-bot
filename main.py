@@ -42,6 +42,16 @@ EXPENSES = [
 user_states = {}
 
 # =====================
+# HELPERS
+# =====================
+
+def parse_number(text):
+    try:
+        return float(text.replace(",", "."))
+    except:
+        return None
+
+# =====================
 # TELEGRAM
 # =====================
 
@@ -160,7 +170,6 @@ async def webhook(request: Request):
     if not chat_id:
         return {"ok": True}
 
-    # 👉 старт / будь-яке повідомлення без state
     state = user_states.get(chat_id)
 
     if text == "/start":
@@ -174,7 +183,13 @@ async def webhook(request: Request):
     # ===== QTY =====
 
     if state.get("step") == "qty":
-        state["qty"] = float(text)
+        qty = parse_number(text)
+
+        if qty is None:
+            send(chat_id, "Введи кількість числом (10 або 10,5)")
+            return {"ok": True}
+
+        state["qty"] = qty
         state["step"] = "price"
 
         if state["unit"] == "т":
@@ -190,7 +205,12 @@ async def webhook(request: Request):
     # ===== PRICE =====
 
     if state.get("step") == "price":
-        price = float(text)
+        price = parse_number(text)
+
+        if price is None:
+            send(chat_id, "Введи коректну ціну (450 або 450,5)")
+            return {"ok": True}
+
         qty = state["qty"]
         total = qty * price
 
@@ -211,13 +231,11 @@ async def webhook(request: Request):
             total
         ])
 
-        # красивий текст
         if state["mode"] == "buy":
             text_msg = f"""🟢 Купівля записана:
 {date}
 {state['item']} — {qty} т × {price} грн
 Сума: {total} грн"""
-
         else:
             unit = state["unit"]
             text_msg = f"""🔵 Продаж записаний:
@@ -235,7 +253,11 @@ async def webhook(request: Request):
     # ===== EXPENSE =====
 
     if state.get("step") == "amount":
-        amount = float(text)
+        amount = parse_number(text)
+
+        if amount is None:
+            send(chat_id, "Введи суму числом (1000 або 1000,5)")
+            return {"ok": True}
 
         now = datetime.now()
         date = now.strftime("%d.%m.%Y")
