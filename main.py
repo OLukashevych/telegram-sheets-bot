@@ -65,6 +65,22 @@ def parse_number(text):
     except:
         return None
 
+def build_keyboard(items, cols=2):
+    keyboard = []
+    row = []
+
+    for i, item in enumerate(items, 1):
+        row.append({"text": item, "callback_data": item})
+
+        if i % cols == 0:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    return keyboard
+
 # =====================
 # TELEGRAM
 # =====================
@@ -134,26 +150,26 @@ async def webhook(request: Request):
 
         if action == "BUY":
             user_states[chat_id] = {"mode": "buy", "step": "item"}
-            send(chat_id, "🟢 Купую товар:", [[{"text": x, "callback_data": x}] for x in BUY_ITEMS])
+            send(chat_id, "🟢 Купую товар:", build_keyboard(BUY_ITEMS, 2))
             return {"ok": True}
 
         if action == "SELL":
             user_states[chat_id] = {"mode": "sell", "step": "item"}
 
-            keyboard = [[{"text": x, "callback_data": x}] for x in BUY_ITEMS]
-            keyboard += [[{"text": x, "callback_data": x}] for x in SERVICES]
+            keyboard = build_keyboard(BUY_ITEMS, 2)
+            keyboard += build_keyboard(list(SERVICES.keys()), 2)
 
             send(chat_id, "🔵 Продаю:", keyboard)
             return {"ok": True}
 
         if action == "EXP":
             user_states[chat_id] = {"mode": "exp", "step": "item"}
-            send(chat_id, "🔴 Витрати:", [[{"text": x, "callback_data": x}] for x in EXPENSES])
+            send(chat_id, "🔴 Витрати:", build_keyboard(EXPENSES, 2))
             return {"ok": True}
 
         if action == "TAX":
             user_states[chat_id] = {"mode": "tax", "step": "item"}
-            send(chat_id, "🟡 Податки:", [[{"text": x, "callback_data": x}] for x in TAXES])
+            send(chat_id, "🟡 Податки:", build_keyboard(TAXES, 2))
             return {"ok": True}
 
         # ===== ITEM SELECT =====
@@ -206,7 +222,7 @@ async def webhook(request: Request):
         qty = parse_number(text)
 
         if qty is None:
-            send(chat_id, "Введи кількість (наприклад: 10 або 10,5)")
+            send(chat_id, "Введи число (10 або 10,5)")
             return {"ok": True}
 
         state["qty"] = round(qty, 2)
@@ -241,7 +257,6 @@ async def webhook(request: Request):
         sheet = get_sheet()
         ws = sheet.worksheet("продаю" if state["mode"] == "sell" else "купую")
 
-        # BUY — без unit
         if state["mode"] == "buy":
             ws.append_row([
                 now.strftime("%Y-%m-%d"),
@@ -258,7 +273,6 @@ async def webhook(request: Request):
 {state['item']} — {qty} т × {price}
 Сума: {total} грн"""
 
-        # SELL — з unit
         else:
             ws.append_row([
                 now.strftime("%Y-%m-%d"),
@@ -280,6 +294,7 @@ async def webhook(request: Request):
 
         user_states.pop(chat_id)
         menu(chat_id)
+
         return {"ok": True}
 
     # ===== EXPENSE / TAX =====
@@ -315,6 +330,7 @@ async def webhook(request: Request):
 
         user_states.pop(chat_id)
         menu(chat_id)
+
         return {"ok": True}
 
     return {"ok": True}
