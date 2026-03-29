@@ -23,12 +23,13 @@ def tg_url():
 
 BUY_ITEMS = [
     "Пісок буд.", "Пісок мит", "Щ 3/8", "Щ 5/20",
-    "Щ 20/40", "Щ 40/70", "Відсів", "Т-крихта"
+    "Щ 20/40", "Щ 40/70", "Відсів", "Т-крихта",
+    "Земля", "Торф", "Дрова"
 ]
 
 SERVICES = {
     "Навантажувач": "год",
-    "Доставка": "км"
+    "Доставка": None  # 👈 без одиниці
 }
 
 EXPENSES = [
@@ -54,6 +55,7 @@ TAXES = [
 # =====================
 
 user_states = {}
+users = {}
 
 # =====================
 # HELPERS
@@ -65,7 +67,8 @@ def parse_number(text):
     except:
         return None
 
-def build_keyboard(items, cols=2):
+
+def build_keyboard(items, cols=3):
     keyboard = []
     row = []
 
@@ -81,33 +84,6 @@ def build_keyboard(items, cols=2):
 
     return keyboard
 
-# =====================
-# TELEGRAM
-# =====================
-
-def send(chat_id, text, keyboard=None):
-    payload = {
-        "chat_id": chat_id,
-        "text": text
-    }
-
-    if keyboard:
-        payload["reply_markup"] = {"inline_keyboard": keyboard}
-
-    requests.post(f"{tg_url()}/sendMessage", json=payload)
-
-
-def menu(chat_id):
-    send(chat_id, "📊 Меню:", [
-        [
-            {"text": "🟢 Купую", "callback_data": "BUY"},
-            {"text": "🔵 Продаю", "callback_data": "SELL"}
-        ],
-        [
-            {"text": "🔴 Витрати", "callback_data": "EXP"},
-            {"text": "🟡 Податки", "callback_data": "TAX"}
-        ]
-    ])
 
 # =====================
 # GOOGLE SHEETS
@@ -127,6 +103,77 @@ def get_sheet():
 
     return client.open_by_key(os.environ["SHEET_KEY"])
 
+
+def load_users():
+    try:
+        sheet = get_sheet()
+        ws = sheet.worksheet("users")
+
+        rows = ws.get_all_values()
+
+        for r in rows[1:]:
+            users[int(r[0])] = r[1]
+    except:
+        pass
+
+
+def save_user(user_id, phone):
+    sheet = get_sheet()
+    ws = sheet.worksheet("users")
+
+    ws.append_row([user_id, phone])
+    users[user_id] = phone
+
+
+# =====================
+# TELEGRAM
+# =====================
+
+def send(chat_id, text, keyboard=None):
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
+    if keyboard:
+        payload["reply_markup"] = {"inline_keyboard": keyboard}
+
+    requests.post(f"{tg_url()}/sendMessage", json=payload)
+
+
+def request_phone(chat_id):
+    requests.post(f"{tg_url()}/sendMessage", json={
+        "chat_id": chat_id,
+        "text": "📱 Поділись номером",
+        "reply_markup": {
+            "keyboard": [[{
+                "text": "📱 Надіслати номер",
+                "request_contact": True
+            }]],
+            "resize_keyboard": True,
+            "one_time_keyboard": True
+        }
+    })
+
+
+def menu(chat_id):
+    send(chat_id, "📊 Меню:", [
+        [
+            {"text": "🟢 Купую", "callback_data": "BUY"},
+            {"text": "🔵 Продаю", "callback_data": "SELL"}
+        ],
+        [
+            {"text": "🔴 Витрати", "callback_data": "EXP"},
+            {"text": "🟡 Податки", "callback_data": "TAX"}
+        ]
+    ])
+
+# =====================
+# INIT
+# =====================
+
+load_users()
+
 # =====================
 # WEBHOOK
 # =====================
@@ -137,200 +184,206 @@ async def webhook(request: Request):
     data = await request.json()
 
     # =====================
+    # MESSAGE
+    # =====================
+
+    if "message" in data:
+        message = data["message"]
+        chat_id = message["chat"]["id"]
+        user_id = message["from"]["id"]
+
+        if user_id not in users and "contact" not in message:
+            request_phone(chat_id)
+            return {"ok": True}
+
+        if "contact" in message:
+            phone = message["contact"]["phone_number"]
+            save_user(user_id, phone)
+
+            send(chat_id, "✅ Збережено")
+            menu(chat_id)
+            return {"ok": True}
+
+        state = user_states.get(chat_id)
+        text = message.get("text", "")
+
+        if text == "/start":
+            menu(chat_id)
+            return {"ok": True}
+
+        if not state:
+            menu(chat_id)
+            return {"ok": True}
+
+        # ===== QTY =====
+
+        if state.get("step") == "qty":
+            qty = parse_number(text)
+
+            if qty is None:
+                send(chat_id, "Введи число")
+                return {"ok": True}
+
+            state["qty"] = round(qty, 2)
+            state["step"] = "price"
+
+            send(chat_id, "Ціна:")
+            user_states[chat_id] = state
+            return {"ok": True}
+
+        # ===== PRICE =====
+
+        if state.get("step") == "price":
+            price = parse_number(text)
+
+            if price is None:
+                send(chat_id, "Введи число")
+                return {"ok": True}
+
+            qty = state["qty"]
+            total = round(qty * price, 2)
+
+            now = datetime.now()
+            user_identifier = users.get(user_id, str(user_id))
+
+            sheet = get_sheet()
+
+            if state["mode"] == "buy":
+                ws = sheet.worksheet("купую")
+
+                ws.append_row([
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
+                    state["item"],
+                    qty,
+                    price,
+                    total,
+                    user_identifier
+                ])
+
+            else:
+                ws = sheet.worksheet("продаю")
+
+                ws.append_row([
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
+                    state["item"],
+                    qty,
+                    state.get("unit", "т"),
+                    price,
+                    total,
+                    user_identifier
+                ])
+
+            send(chat_id, f"✅ {state['item']} {qty} × {price} = {total}")
+
+            user_states.pop(chat_id)
+            menu(chat_id)
+            return {"ok": True}
+
+        # ===== AMOUNT =====
+
+        if state.get("step") == "amount":
+            amount = parse_number(text)
+
+            if amount is None:
+                send(chat_id, "Введи число")
+                return {"ok": True}
+
+            user_identifier = users.get(user_id, str(user_id))
+            sheet = get_sheet()
+
+            now = datetime.now()
+
+            # 🚚 доставка
+            if state["mode"] == "sell" and state["item"] == "Доставка":
+                ws = sheet.worksheet("продаю")
+
+                ws.append_row([
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
+                    state["item"],
+                    "",  # qty
+                    "",  # unit
+                    amount,
+                    amount,
+                    user_identifier
+                ])
+
+                send(chat_id, f"🚚 Доставка: {amount} грн")
+
+            else:
+                ws = sheet.worksheet("витрати")
+
+                ws.append_row([
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
+                    state["item"],
+                    amount,
+                    user_identifier
+                ])
+
+                send(chat_id, f"✅ {state['item']} {amount}")
+
+            user_states.pop(chat_id)
+            menu(chat_id)
+            return {"ok": True}
+
+    # =====================
     # CALLBACK
     # =====================
+
     if "callback_query" in data:
         cb = data["callback_query"]
         chat_id = cb["message"]["chat"]["id"]
         action = cb["data"]
 
-        state = user_states.get(chat_id, {})
-
-        # ===== MENU =====
-
         if action == "BUY":
             user_states[chat_id] = {"mode": "buy", "step": "item"}
-            send(chat_id, "🟢 Купую товар:", build_keyboard(BUY_ITEMS, 2))
+            send(chat_id, "🟢 Купую:", build_keyboard(BUY_ITEMS, 3))
             return {"ok": True}
 
         if action == "SELL":
             user_states[chat_id] = {"mode": "sell", "step": "item"}
 
-            keyboard = build_keyboard(BUY_ITEMS, 2)
-            keyboard += build_keyboard(list(SERVICES.keys()), 2)
+            keyboard = build_keyboard(BUY_ITEMS, 3)
+            keyboard += build_keyboard(list(SERVICES.keys()), 3)
 
             send(chat_id, "🔵 Продаю:", keyboard)
             return {"ok": True}
 
         if action == "EXP":
             user_states[chat_id] = {"mode": "exp", "step": "item"}
-            send(chat_id, "🔴 Витрати:", build_keyboard(EXPENSES, 2))
+            send(chat_id, "🔴 Витрати:", build_keyboard(EXPENSES, 3))
             return {"ok": True}
 
         if action == "TAX":
             user_states[chat_id] = {"mode": "tax", "step": "item"}
-            send(chat_id, "🟡 Податки:", build_keyboard(TAXES, 2))
+            send(chat_id, "🟡 Податки:", build_keyboard(TAXES, 3))
             return {"ok": True}
 
-        # ===== ITEM SELECT =====
+        state = user_states.get(chat_id)
 
-        if state.get("step") == "item":
+        if state and state.get("step") == "item":
             state["item"] = action
 
-            if state["mode"] in ["exp", "tax"]:
+            if action == "Доставка":
                 state["step"] = "amount"
-                send(chat_id, "Введи суму:")
+                send(chat_id, "Сума доставки:")
+
+            elif state["mode"] in ["exp", "tax"]:
+                state["step"] = "amount"
+                send(chat_id, "Сума:")
+
             else:
                 state["step"] = "qty"
-
-                if action in SERVICES:
-                    state["unit"] = SERVICES[action]
-                    send(chat_id, f"Введи кількість {state['unit']}:")
-                else:
-                    state["unit"] = "т"
-                    send(chat_id, "Введи кількість тонн:")
+                send(chat_id, "Кількість:")
 
             user_states[chat_id] = state
             return {"ok": True}
-
-        return {"ok": True}
-
-    # =====================
-    # MESSAGE
-    # =====================
-
-    msg = data.get("message", {})
-    chat_id = msg.get("chat", {}).get("id")
-    text = msg.get("text", "")
-
-    if not chat_id:
-        return {"ok": True}
-
-    state = user_states.get(chat_id)
-
-    if text == "/start":
-        menu(chat_id)
-        return {"ok": True}
-
-    if not state:
-        menu(chat_id)
-        return {"ok": True}
-
-    # ===== QTY =====
-
-    if state.get("step") == "qty":
-        qty = parse_number(text)
-
-        if qty is None:
-            send(chat_id, "Введи число (10 або 10,5)")
-            return {"ok": True}
-
-        state["qty"] = round(qty, 2)
-        state["step"] = "price"
-
-        if state["unit"] == "т":
-            send(chat_id, "Ціна за тонну:")
-        elif state["unit"] == "год":
-            send(chat_id, "Ціна за годину:")
-        else:
-            send(chat_id, "Ціна за км:")
-
-        user_states[chat_id] = state
-        return {"ok": True}
-
-    # ===== PRICE =====
-
-    if state.get("step") == "price":
-        price = parse_number(text)
-
-        if price is None:
-            send(chat_id, "Введи коректну ціну")
-            return {"ok": True}
-
-        price = round(price, 2)
-        qty = state["qty"]
-        total = round(qty * price, 2)
-
-        now = datetime.now()
-        date = now.strftime("%d.%m.%Y")
-
-        sheet = get_sheet()
-        ws = sheet.worksheet("продаю" if state["mode"] == "sell" else "купую")
-
-        if state["mode"] == "buy":
-            ws.append_row([
-                now.strftime("%Y-%m-%d"),
-                now.strftime("%m"),
-                now.strftime("%Y"),
-                state["item"],
-                qty,
-                price,
-                total
-            ])
-
-            text_msg = f"""🟢 Купівля:
-{date}
-{state['item']} — {qty} т × {price}
-Сума: {total} грн"""
-
-        else:
-            ws.append_row([
-                now.strftime("%Y-%m-%d"),
-                now.strftime("%m"),
-                now.strftime("%Y"),
-                state["item"],
-                qty,
-                state["unit"],
-                price,
-                total
-            ])
-
-            text_msg = f"""🔵 Продаж:
-{date}
-{state['item']} — {qty} {state['unit']} × {price}
-Виручка: {total} грн"""
-
-        send(chat_id, text_msg)
-
-        user_states.pop(chat_id)
-        menu(chat_id)
-
-        return {"ok": True}
-
-    # ===== EXPENSE / TAX =====
-
-    if state.get("step") == "amount":
-        amount = parse_number(text)
-
-        if amount is None:
-            send(chat_id, "Введи суму числом")
-            return {"ok": True}
-
-        amount = round(amount, 2)
-
-        now = datetime.now()
-        date = now.strftime("%d.%m.%Y")
-
-        sheet = get_sheet()
-        ws = sheet.worksheet("витрати")
-
-        ws.append_row([
-            now.strftime("%Y-%m-%d"),
-            now.strftime("%m"),
-            now.strftime("%Y"),
-            state["item"],
-            amount
-        ])
-
-        icon = "🔴" if state["mode"] == "exp" else "🟡"
-
-        send(chat_id, f"""{icon} Записано:
-{date}
-{state['item']} — {amount} грн""")
-
-        user_states.pop(chat_id)
-        menu(chat_id)
-
-        return {"ok": True}
 
     return {"ok": True}
