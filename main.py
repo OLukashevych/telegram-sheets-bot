@@ -31,13 +31,14 @@ SERVICES = ["Навантажувач", "Доставка"]
 
 EXPENSES = [
     "Паливо", "Обслуговування",
-    "З/П водій 1", "З/П водій 2", "З/П водій",
-    "бухгалтер", "Ремонт"
+    "З/П водій 1", "З/П водій 2",
+    "З/П водій", "бухгалтер", "Ремонт"
 ]
 
 TAXES = [
     "Податок водій 1", "Податок водій 2",
-    "Податок ФОП", "Податок за землю", "Податок за Н/Ж прим."
+    "Податок ФОП", "Податок за землю",
+    "Податок за Н/Ж прим."
 ]
 
 # =====================
@@ -141,10 +142,7 @@ async def webhook(request: Request):
 
     data = await request.json()
 
-    # =====================
-    # MESSAGE
-    # =====================
-
+    # ===== MESSAGE =====
     if "message" in data:
         m = data["message"]
         chat_id = m["chat"]["id"]
@@ -152,27 +150,20 @@ async def webhook(request: Request):
         text = m.get("text", "")
         state = user_states.get(chat_id)
 
-        # 🔹 контакт
+        # контакт
         if "contact" in m:
             phone = m["contact"]["phone_number"]
             save_user(user_id, phone)
             send(chat_id, "✅ Збережено")
-            if not state:
-                menu(chat_id)
-            return {"ok": True}
-
-        # 🔹 тільки на старті просимо телефон
-        if user_id not in users and not state:
-            ask_phone(chat_id)
-            return {"ok": True}
-
-        if text == "/start":
-            user_states.pop(chat_id, None)
             menu(chat_id)
             return {"ok": True}
 
+        # старт без /start
         if not state:
-            menu(chat_id)
+            if user_id not in users:
+                ask_phone(chat_id)
+            else:
+                menu(chat_id)
             return {"ok": True}
 
         # ===== QTY =====
@@ -196,6 +187,7 @@ async def webhook(request: Request):
 
             qty = state["qty"]
             total = round(qty * p, 2)
+
             now = datetime.now()
             u = users.get(user_id, str(user_id))
 
@@ -203,12 +195,16 @@ async def webhook(request: Request):
 
             if state["mode"] == "buy":
                 sh.worksheet("купую").append_row([
-                    now.strftime("%Y-%m-%d"), now.strftime("%m"), now.strftime("%Y"),
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
                     state["item"], qty, p, total, u
                 ])
             else:
                 sh.worksheet("продаю").append_row([
-                    now.strftime("%Y-%m-%d"), now.strftime("%m"), now.strftime("%Y"),
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
                     state["item"], qty, "т", p, total, u
                 ])
 
@@ -228,17 +224,19 @@ async def webhook(request: Request):
             u = users.get(user_id, str(user_id))
             sh = sheet()
 
-            # 🚚 доставка
             if state["mode"] == "sell" and state["item"] == "Доставка":
                 sh.worksheet("продаю").append_row([
-                    now.strftime("%Y-%m-%d"), now.strftime("%m"), now.strftime("%Y"),
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
                     "Доставка", "", "", a, a, u
                 ])
                 send(chat_id, f"🚚 Доставка {a} грн")
-
             else:
                 sh.worksheet("витрати").append_row([
-                    now.strftime("%Y-%m-%d"), now.strftime("%m"), now.strftime("%Y"),
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%m"),
+                    now.strftime("%Y"),
                     state["item"], a, u
                 ])
                 send(chat_id, f"✅ {state['item']} {a}")
@@ -247,10 +245,7 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-    # =====================
-    # CALLBACK
-    # =====================
-
+    # ===== CALLBACK =====
     if "callback_query" in data:
         cb = data["callback_query"]
         chat_id = cb["message"]["chat"]["id"]
