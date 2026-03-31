@@ -272,7 +272,7 @@ async def webhook(request: Request):
 
         if action == "TAX":
             user_states[chat_id] = {"mode": "tax", "step": "item"}
-            send(chat_id, "🟡 Податки:", kb(TAXES))
+            send(chat_id, "🟡 Податки:", kb(TAXES, n=2))
             return {"ok": True}
 
         state = user_states.get(chat_id)
