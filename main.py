@@ -23,7 +23,8 @@ def tg():
 
 BUY_ITEMS = [
     "Пісок буд.", "Пісок мит", "Щ 3/8", "Щ 5/20",
-    "Щ 20/40", "Щ 40/70", "Відсів", "Т-крихта",
+    "Щ 20/40", "Щ 40/70", "Щ 0/40",  # 👈 додали
+    "Відсів", "Т-крихта",
     "Земля", "Торф", "Дрова"
 ]
 
@@ -124,19 +125,7 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-        # ===== ВИТРАТИ / ПОДАТКИ: ЦІНА ПАЛИВА =====
-        if state["step"] == "fuel_price":
-            price = num(text)
-            if price is None:
-                send(chat_id, "Введи ціну числом")
-                return {"ok": True}
-
-            state["fuel_price"] = round(price, 2)
-            state["step"] = "amount"
-            send(chat_id, "Сума:")
-            return {"ok": True}
-
-        # ===== СУМА =====
+        # ===== СУМА / ВИТРАТИ =====
         if state["step"] == "amount":
             amount = num(text)
             if amount is None:
@@ -147,7 +136,7 @@ async def webhook(request: Request):
             u = str(user_id)
             sh = sheet()
 
-            # 🚚 доставка як продаж без км
+            # доставка
             if state["mode"] == "sell" and state["item"] == "Доставка":
                 sh.worksheet("продаю").append_row([
                     now.strftime("%Y-%m-%d"),
@@ -161,16 +150,17 @@ async def webhook(request: Request):
                     u
                 ])
 
-                send(chat_id, f"🚚 Доставка {amount} грн")
+                send(chat_id,
+                     f"🚚 Доставка\n"
+                     f"Сума: {amount} грн\n"
+                     f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+                )
+
                 user_states.pop(chat_id)
                 menu(chat_id)
                 return {"ok": True}
 
-            # 🔴 витрати / 🟡 податки
-            price_value = ""
-            if state["item"] == "Паливо":
-                price_value = state.get("fuel_price", "")
-
+            # витрати
             sh.worksheet("витрати").append_row([
                 now.strftime("%Y-%m-%d"),
                 now.strftime("%m"),
@@ -178,13 +168,14 @@ async def webhook(request: Request):
                 state["item"],
                 round(amount, 2),
                 u,
-                price_value
+                ""
             ])
 
-            if state["item"] == "Паливо":
-                send(chat_id, f"⛽ Паливо: ціна {price_value}, сума {round(amount, 2)}")
-            else:
-                send(chat_id, f"✅ {state['item']} {round(amount, 2)}")
+            send(chat_id,
+                 f"✅ {state['item']}\n"
+                 f"Сума: {round(amount, 2)}\n"
+                 f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+            )
 
             user_states.pop(chat_id)
             menu(chat_id)
@@ -228,7 +219,6 @@ async def webhook(request: Request):
                     u
                 ])
             else:
-                # продаж товарів і навантажувача
                 unit = "т"
                 if state["item"] == "Навантажувач":
                     unit = "год"
@@ -245,7 +235,16 @@ async def webhook(request: Request):
                     u
                 ])
 
-            send(chat_id, f"✅ {state['item']} {qty} × {round(p, 2)} = {total}")
+            # 👇 ФІНАЛЬНЕ ПОВІДОМЛЕННЯ
+            send(chat_id,
+                 f"✅ Записано:\n"
+                 f"Номенклатура: {state['item']}\n"
+                 f"Кількість: {qty}\n"
+                 f"Ціна: {round(p, 2)}\n"
+                 f"Сума: {total}\n"
+                 f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+            )
+
             user_states.pop(chat_id)
             menu(chat_id)
             return {"ok": True}
@@ -281,28 +280,18 @@ async def webhook(request: Request):
         if state and state["step"] == "item":
             state["item"] = action
 
-            # продаж: доставка одразу питає суму
             if action == "Доставка":
                 state["step"] = "amount"
                 send(chat_id, "Сума доставки:")
                 return {"ok": True}
 
-            # витрати/податки
             if state["mode"] in ["exp", "tax"]:
-                if action == "Паливо":
-                    state["step"] = "fuel_price"
-                    send(chat_id, "Ціна за літр:")
-                else:
-                    state["step"] = "amount"
-                    send(chat_id, "Сума:")
+                state["step"] = "amount"
+                send(chat_id, "Сума:")
                 return {"ok": True}
 
-            # купівля/продаж товарів, навантажувач
             state["step"] = "qty"
-            if action == "Навантажувач":
-                send(chat_id, "Кількість годин:")
-            else:
-                send(chat_id, "Кількість:")
+            send(chat_id, "Кількість:")
             return {"ok": True}
 
     return {"ok": True}
