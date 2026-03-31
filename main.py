@@ -23,7 +23,7 @@ def tg():
 
 BUY_ITEMS = [
     "Пісок буд.", "Пісок мит", "Щ 3/8", "Щ 5/20",
-    "Щ 20/40", "Щ 40/70", "Щ 0/40",  # 👈 додали
+    "Щ 20/40", "Щ 40/70", "Щ 0/40",
     "Відсів", "Т-крихта",
     "Земля", "Торф", "Дрова"
 ]
@@ -125,7 +125,7 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-        # ===== СУМА / ВИТРАТИ =====
+        # ===== ВВІД СУМИ =====
         if state["step"] == "amount":
             amount = num(text)
             if amount is None:
@@ -153,7 +153,7 @@ async def webhook(request: Request):
                 send(chat_id,
                      f"🚚 Доставка\n"
                      f"Сума: {amount} грн\n"
-                     f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+                     f"📅 {now.strftime('%d.%m.%Y')}"
                 )
 
                 user_states.pop(chat_id)
@@ -174,14 +174,14 @@ async def webhook(request: Request):
             send(chat_id,
                  f"✅ {state['item']}\n"
                  f"Сума: {round(amount, 2)}\n"
-                 f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+                 f"📅 {now.strftime('%d.%m.%Y')}"
             )
 
             user_states.pop(chat_id)
             menu(chat_id)
             return {"ok": True}
 
-        # ===== QTY =====
+        # ===== КІЛЬКІСТЬ =====
         if state["step"] == "qty":
             q = num(text)
             if q is None:
@@ -193,7 +193,7 @@ async def webhook(request: Request):
             send(chat_id, "Ціна:")
             return {"ok": True}
 
-        # ===== PRICE =====
+        # ===== ЦІНА =====
         if state["step"] == "price":
             p = num(text)
             if p is None:
@@ -235,14 +235,14 @@ async def webhook(request: Request):
                     u
                 ])
 
-            # 👇 ФІНАЛЬНЕ ПОВІДОМЛЕННЯ
+            # ✅ ФІНАЛЬНЕ ПОВІДОМЛЕННЯ БЕЗ ЧАСУ
             send(chat_id,
                  f"✅ Записано:\n"
                  f"Номенклатура: {state['item']}\n"
                  f"Кількість: {qty}\n"
                  f"Ціна: {round(p, 2)}\n"
                  f"Сума: {total}\n"
-                 f"📅 {now.strftime('%d.%m.%Y %H:%M')}"
+                 f"📅 {now.strftime('%d.%m.%Y')}"
             )
 
             user_states.pop(chat_id)
