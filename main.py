@@ -10,16 +10,8 @@ import requests
 
 app = FastAPI()
 
-# =====================
-# CONFIG
-# =====================
-
 def tg():
     return f"https://api.telegram.org/bot{os.environ.get('BOT_TOKEN')}"
-
-# =====================
-# DATA
-# =====================
 
 BUY_ITEMS = [
     "Пісок буд.", "Пісок мит", "Щ 3/8", "Щ 5/20",
@@ -44,10 +36,6 @@ TAXES = [
 
 user_states = {}
 
-# =====================
-# HELPERS
-# =====================
-
 def num(x):
     try:
         return float(str(x).replace(",", "."))
@@ -65,10 +53,6 @@ def kb(items, n=3):
         k.append(row)
     return k
 
-# =====================
-# GOOGLE
-# =====================
-
 def sheet():
     creds = json.loads(
         base64.b64decode(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON_B64"]).decode()
@@ -82,10 +66,6 @@ def sheet():
     )
 
     return client.open_by_key(os.environ["SHEET_KEY"])
-
-# =====================
-# TELEGRAM
-# =====================
 
 def send(chat_id, text, k=None):
     payload = {"chat_id": chat_id, "text": text}
@@ -105,15 +85,10 @@ def menu(chat_id):
         ]
     ])
 
-# =====================
-# WEBHOOK
-# =====================
-
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
 
-    # ===== MESSAGE =====
     if "message" in data:
         m = data["message"]
         chat_id = m["chat"]["id"]
@@ -125,7 +100,6 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-        # ===== ВВІД СУМИ =====
         if state["step"] == "amount":
             amount = num(text)
             if amount is None:
@@ -136,13 +110,12 @@ async def webhook(request: Request):
             u = str(user_id)
             sh = sheet()
 
-            # доставка
-            if state["mode"] == "sell" and state["item"] == "Доставка":
+            if state["mode"] == "sell" and state["item"] in ["Доставка", "Навантажувач"]:
                 sh.worksheet("продаю").append_row([
                     now.strftime("%Y-%m-%d"),
                     now.strftime("%m"),
                     now.strftime("%Y"),
-                    "Доставка",
+                    state["item"],
                     "",
                     "",
                     amount,
@@ -151,7 +124,7 @@ async def webhook(request: Request):
                 ])
 
                 send(chat_id,
-                     f"🚚 Доставка\n"
+                     f"🚚 {state['item']}\n"
                      f"Сума: {amount} грн\n"
                      f"📅 {now.strftime('%d.%m.%Y')}"
                 )
@@ -160,7 +133,6 @@ async def webhook(request: Request):
                 menu(chat_id)
                 return {"ok": True}
 
-            # витрати
             sh.worksheet("витрати").append_row([
                 now.strftime("%Y-%m-%d"),
                 now.strftime("%m"),
@@ -181,7 +153,6 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-        # ===== КІЛЬКІСТЬ =====
         if state["step"] == "qty":
             q = num(text)
             if q is None:
@@ -193,7 +164,6 @@ async def webhook(request: Request):
             send(chat_id, "Ціна:")
             return {"ok": True}
 
-        # ===== ЦІНА =====
         if state["step"] == "price":
             p = num(text)
             if p is None:
@@ -235,7 +205,6 @@ async def webhook(request: Request):
                     u
                 ])
 
-            # ✅ ФІНАЛЬНЕ ПОВІДОМЛЕННЯ БЕЗ ЧАСУ
             send(chat_id,
                  f"✅ Записано:\n"
                  f"Номенклатура: {state['item']}\n"
@@ -249,7 +218,6 @@ async def webhook(request: Request):
             menu(chat_id)
             return {"ok": True}
 
-    # ===== CALLBACK =====
     if "callback_query" in data:
         cb = data["callback_query"]
         chat_id = cb["message"]["chat"]["id"]
@@ -280,9 +248,9 @@ async def webhook(request: Request):
         if state and state["step"] == "item":
             state["item"] = action
 
-            if action == "Доставка":
+            if action in ["Доставка", "Навантажувач"]:
                 state["step"] = "amount"
-                send(chat_id, "Сума доставки:")
+                send(chat_id, f"Сума {action.lower()}:")
                 return {"ok": True}
 
             if state["mode"] in ["exp", "tax"]:
